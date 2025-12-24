@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, TextBox
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from mpl_toolkits.mplot3d import proj3d
 from pathlib import Path
 import sys
 import random
@@ -61,6 +62,7 @@ def main():
     ax.set_ylabel("Y (мм)")
     ax.set_zlabel("Z (мм)")
 
+    # сфера рабочей области
     u = np.linspace(0, 2 * np.pi, 40)
     v = np.linspace(0, np.pi, 20)
     xs = R_WORK_MM * np.outer(np.cos(u), np.sin(v))
@@ -68,6 +70,7 @@ def main():
     zs = R_WORK_MM * np.outer(np.ones_like(u), np.cos(v))
     ax.plot_surface(xs, ys, zs, color="purple", alpha=0.1, linewidth=0)
 
+    # линия манипулятора
     def all_points_mm(q_local):
         q1, q2, q3, q4 = q_local[:4]
         pts = robot.forward(q1, q2, q3, q4)
@@ -78,12 +81,14 @@ def main():
     lc = Line3DCollection(segs, colors=["b"] * (len(pts) - 1), linewidths=3)
     ax.add_collection3d(lc)
 
+    # суставы
     joint_scatter = ax.scatter(
         pts[:, 0], pts[:, 1], pts[:, 2],
         c=["k", "k", "k", "k", "r"],
         s=[30, 30, 30, 30, 40]
     )
 
+    # случайные точки
     scatter = None
     labels = []
 
@@ -106,14 +111,16 @@ def main():
 
     rand_pts = draw_random_points()
 
+    # GUI поля ввода
     axbox_x1 = plt.axes([0.03, 0.78, 0.20, 0.04])
     axbox_y1 = plt.axes([0.03, 0.72, 0.20, 0.04])
     axbox_z1 = plt.axes([0.03, 0.66, 0.20, 0.04])
 
-    x1_box = TextBox(axbox_x1, "X1:", initial="0")
-    y1_box = TextBox(axbox_y1, "Y1:", initial="0")
-    z1_box = TextBox(axbox_z1, "Z1:", initial="0")
+    x1_box = TextBox(axbox_x1, "X (мм):", initial="0")
+    y1_box = TextBox(axbox_y1, "Y (мм):", initial="0")
+    z1_box = TextBox(axbox_z1, "Z (мм):", initial="0")
 
+    # кнопки
     ax_btn_calc = plt.axes([0.03, 0.58, 0.20, 0.05])
     btn_calc = Button(ax_btn_calc, "Рассчитать углы", color="lightgreen")
 
@@ -121,12 +128,14 @@ def main():
     btn_home = Button(ax_btn_home, "Исходное положение", color="lightblue")
 
     ax_btn_rand = plt.axes([0.03, 0.42, 0.20, 0.05])
-    btn_rand = Button(ax_btn_rand, "Обновить случайные точки", color="0.9")
+    btn_rand = Button(ax_btn_rand, "Обновить точки", color="0.9")
 
+    # текст результатов
     ax_result = plt.axes([0.03, 0.02, 0.20, 0.18])
     ax_result.axis("off")
     result_text = ax_result.text(0.0, 1.0, "", va="top", fontsize=9)
 
+    # функция перерисовки робота
     def redraw(q_local):
         pts_local = all_points_mm(q_local)
         segs_local = np.stack([pts_local[:-1], pts_local[1:]], axis=1)
@@ -143,6 +152,7 @@ def main():
         result_text.set_text("\n".join(lines))
         fig.canvas.draw_idle()
 
+    # обработчик кнопки "Рассчитать углы"
     def on_calc(event):
         nonlocal q
         try:
@@ -163,7 +173,7 @@ def main():
         try:
             q_new = ik_mm(target, q0=q)
         except Exception as e:
-            result_text.set_text(f"ИК не сошлась: {e}")
+            result_text.set_text(f"ИК не сошлась: {str(e)[:30]}")
             fig.canvas.draw_idle()
             return
 
@@ -171,12 +181,14 @@ def main():
         redraw(q)
         set_result_from_q(q)
 
+    # обработчик кнопки "Исходное положение"
     def on_home(event):
         nonlocal q
         q = np.zeros(N_JOINTS)
         redraw(q)
         set_result_from_q(q)
 
+    # обработчик кнопки "Обновить точки"
     def on_rand(event):
         nonlocal rand_pts
         rand_pts = draw_random_points()
@@ -185,37 +197,66 @@ def main():
     btn_home.on_clicked(on_home)
     btn_rand.on_clicked(on_rand)
 
+    # обработчик клика по 3D графику
     def on_click(event):
         nonlocal q
+        
+        # Проверяем, что клик внутри осей
         if event.inaxes is not ax:
             return
-        if len(rand_pts) == 0 or event.xdata is None or event.ydata is None:
+        
+        # Если нет данных о клике
+        if event.xdata is None or event.ydata is None:
             return
-
-        click_xy = np.array([event.xdata, event.ydata])
-        pts_xy = rand_pts[:, :2]
-        d2 = np.sum((pts_xy - click_xy) ** 2, axis=1)
-        idx = int(np.argmin(d2))
-        target = rand_pts[idx]
-
+        
+        if len(rand_pts) == 0:
+            return
+        
+        # Получаем координаты клика в 2D (на экране)
+        click_x_screen = event.xdata
+        click_y_screen = event.ydata
+        
+        min_dist = float('inf')
+        closest_idx = -1
+        
+        # Ищем ближайшую точку на экране (в 2D проекции)
+        for i, pt in enumerate(rand_pts):
+            # Проецируем 3D точку на 2D экран
+            x2d, y2d, _ = proj3d.proj_transform(pt[0], pt[1], pt[2], ax.get_proj())
+            
+            # Расстояние на экране
+            dist = np.sqrt((x2d - click_x_screen)**2 + (y2d - click_y_screen)**2)
+            
+            if dist < min_dist:
+                min_dist = dist
+                closest_idx = i
+        
+        # Если не нашли близкую точку на экране, выходим
+        if closest_idx < 0 or min_dist > 0.05:
+            return
+        
+        target = rand_pts[closest_idx]
+        
         if not inside_workspace(target):
             result_text.set_text("Точка вне рабочей сферы")
             fig.canvas.draw_idle()
             return
-
+        
         try:
             q_new = ik_mm(target, q0=q)
         except Exception as e:
-            result_text.set_text(f"ИК не сошлась: {e}")
+            result_text.set_text(f"ИК не сошлась: {str(e)[:30]}")
             fig.canvas.draw_idle()
             return
-
+        
         q = np.asarray(q_new, dtype=float)
         redraw(q)
         set_result_from_q(q)
 
+    # подключаем обработчик клика
     fig.canvas.mpl_connect("button_press_event", on_click)
 
+    # стартовый вывод
     set_result_from_q(q)
     plt.show()
 

@@ -1,46 +1,34 @@
 import numpy as np
 
 def inverse_kinematics_rrrr(target, l1=0.4, l2=0.35, l3=0.20):
-    x, y, z = target
-
-    # 1. Поворот базы
+    x = float(target[0])
+    y = float(target[1])
+    z = float(target[2])
+    
     q1 = np.arctan2(y, x)
-
-    # 2. Плоская задача (r, z)
-    r_end = np.hypot(x, y)
-    z_end = z
-
-    # Целимся запястьем, предполагая, что кисть горизонтальна
-    r_wrist = r_end - l3
-    z_wrist = z_end
-
-    # Решаем треугольник для l1, l2
-    d_sq = r_wrist**2 + z_wrist**2
-    d = np.sqrt(d_sq)
-
-    if d > (l1 + l2):
-        d = l1 + l2
-        r_wrist = d * r_wrist / np.sqrt(d_sq)
-        z_wrist = d * z_wrist / np.sqrt(d_sq)
-        d_sq = d**2
-
-    # Угол локтя (внутренний угол gamma)
-    cos_gamma = (l1**2 + l2**2 - d_sq) / (2 * l1 * l2)
-    cos_gamma = np.clip(cos_gamma, -1.0, 1.0)
-    gamma = np.arccos(cos_gamma)
+    r = np.sqrt(x*x + y*y)
+    r_eff = r - l3
+    z_eff = z
     
-    # Наш q3 = -(pi - gamma), т.к. в FK это поворот относительно предыдущего звена
-    q3 = -(np.pi - gamma)
-
-    # Угол плеча q2
-    alpha = np.arctan2(z_wrist, r_wrist)
-    cos_beta = (l1**2 + d_sq - l2**2) / (2 * l1 * d)
-    cos_beta = np.clip(cos_beta, -1.0, 1.0)
-    beta = np.arccos(cos_beta)
+    d = np.sqrt(r_eff*r_eff + z_eff*z_eff)
     
-    q2 = alpha + beta
-
-    # Угол кисти (чтобы горизонтально)
+    reach_max = l1 + l2
+    reach_min = abs(l1 - l2)
+    
+    if d > reach_max:
+        d = reach_max
+    if d < reach_min:
+        d = reach_min
+    
+    cos_q3 = (l1*l1 + l2*l2 - d*d) / (2.0 * l1 * l2)
+    cos_q3 = max(-1.0, min(1.0, cos_q3))
+    q3 = -(np.pi - np.arccos(cos_q3))
+    
+    alpha = np.arctan2(z_eff, r_eff)
+    cos_beta = (l1*l1 + d*d - l2*l2) / (2.0 * l1 * d)
+    cos_beta = max(-1.0, min(1.0, cos_beta))
+    q2 = alpha + np.arccos(cos_beta)
+    
     q4 = -(q2 + q3)
-
+    
     return q1, q2, q3, q4
