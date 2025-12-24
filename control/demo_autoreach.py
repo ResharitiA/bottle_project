@@ -42,6 +42,10 @@ def generate_random_points(n=10):
 def ik_mm(target_mm, q0=None):
     target_m = np.asarray(target_mm) / MM
     q1, q2, q3, q4 = inverse_kinematics_rrrr(target_m, l1=robot.l1, l2=robot.l2, l3=robot.l3)
+    # ИНВЕРТИРУЕМ q2 И q3
+    q2 = -q2
+    q3 = -q3
+    q4 = -(q2 + q3)
     return np.array([q1, q2, q3, q4])
 
 
@@ -60,7 +64,6 @@ def main():
     ax.set_ylabel("Y (мм)")
     ax.set_zlabel("Z (мм)")
 
-    # сфера рабочей области
     u = np.linspace(0, 2 * np.pi, 40)
     v = np.linspace(0, np.pi, 20)
     xs = R_WORK_MM * np.outer(np.cos(u), np.sin(v))
@@ -68,7 +71,6 @@ def main():
     zs = R_WORK_MM * np.outer(np.ones_like(u), np.cos(v))
     ax.plot_surface(xs, ys, zs, color="purple", alpha=0.1, linewidth=0)
 
-    # линия манипулятора
     def all_points_mm(q_local):
         q1, q2, q3, q4 = q_local[:4]
         pts = robot.forward(q1, q2, q3, q4)
@@ -79,14 +81,12 @@ def main():
     lc = Line3DCollection(segs, colors=["b"] * (len(pts) - 1), linewidths=3)
     ax.add_collection3d(lc)
 
-    # суставы
     joint_scatter = ax.scatter(
         pts[:, 0], pts[:, 1], pts[:, 2],
         c=["k", "k", "k", "k", "r"],
         s=[30, 30, 30, 30, 40]
     )
 
-    # случайные точки
     scatter = None
     labels = []
 
@@ -109,7 +109,6 @@ def main():
 
     rand_pts = draw_random_points()
 
-    # GUI поля ввода
     axbox_x1 = plt.axes([0.03, 0.78, 0.20, 0.04])
     axbox_y1 = plt.axes([0.03, 0.72, 0.20, 0.04])
     axbox_z1 = plt.axes([0.03, 0.66, 0.20, 0.04])
@@ -118,7 +117,6 @@ def main():
     y1_box = TextBox(axbox_y1, "Y (мм):", initial="0")
     z1_box = TextBox(axbox_z1, "Z (мм):", initial="0")
 
-    # кнопки
     ax_btn_calc = plt.axes([0.03, 0.58, 0.20, 0.05])
     btn_calc = Button(ax_btn_calc, "Рассчитать углы", color="lightgreen")
 
@@ -128,12 +126,10 @@ def main():
     ax_btn_rand = plt.axes([0.03, 0.42, 0.20, 0.05])
     btn_rand = Button(ax_btn_rand, "Обновить точки", color="0.9")
 
-    # текст результатов
     ax_result = plt.axes([0.03, 0.02, 0.20, 0.18])
     ax_result.axis("off")
     result_text = ax_result.text(0.0, 1.0, "", va="top", fontsize=9)
 
-    # функция перерисовки робота
     def redraw(q_local):
         pts_local = all_points_mm(q_local)
         segs_local = np.stack([pts_local[:-1], pts_local[1:]], axis=1)
@@ -150,7 +146,6 @@ def main():
         result_text.set_text("\n".join(lines))
         fig.canvas.draw_idle()
 
-    # обработчик кнопки "Рассчитать углы"
     def on_calc(event):
         nonlocal q
         try:
@@ -171,7 +166,7 @@ def main():
         try:
             q_new = ik_mm(target, q0=q)
         except Exception as e:
-            result_text.set_text(f"ИК ошибка: {str(e)[:25]}")
+            result_text.set_text(f"ИК ошибка")
             fig.canvas.draw_idle()
             return
 
@@ -179,14 +174,12 @@ def main():
         redraw(q)
         set_result_from_q(q)
 
-    # обработчик кнопки "Исходное положение"
     def on_home(event):
         nonlocal q
         q = np.zeros(N_JOINTS)
         redraw(q)
         set_result_from_q(q)
 
-    # обработчик кнопки "Обновить точки"
     def on_rand(event):
         nonlocal rand_pts
         rand_pts = draw_random_points()
@@ -195,7 +188,6 @@ def main():
     btn_home.on_clicked(on_home)
     btn_rand.on_clicked(on_rand)
 
-    # обработчик клика по 3D графику
     def on_click(event):
         nonlocal q
         
@@ -235,7 +227,7 @@ def main():
         try:
             q_new = ik_mm(target, q0=q)
         except Exception as e:
-            result_text.set_text(f"ИК ошибка: {str(e)[:25]}")
+            result_text.set_text(f"ИК ошибка")
             fig.canvas.draw_idle()
             return
         

@@ -7,10 +7,10 @@ def inverse_kinematics_rrrr(target, l1=0.4, l2=0.35, l3=0.20):
     
     q1 = np.arctan2(y, x)
     r = np.sqrt(x*x + y*y)
-    r_eff = r - l3
-    z_eff = z
+    r_wrist = r - l3
+    z_wrist = z
     
-    d = np.sqrt(r_eff*r_eff + z_eff*z_eff)
+    d = np.sqrt(r_wrist*r_wrist + z_wrist*z_wrist)
     
     reach_max = l1 + l2
     reach_min = abs(l1 - l2)
@@ -24,7 +24,7 @@ def inverse_kinematics_rrrr(target, l1=0.4, l2=0.35, l3=0.20):
     cos_q3 = max(-1.0, min(1.0, cos_q3))
     q3 = -(np.pi - np.arccos(cos_q3))
     
-    alpha = np.arctan2(z_eff, r_eff)
+    alpha = np.arctan2(z_wrist, r_wrist)
     cos_beta = (l1*l1 + d*d - l2*l2) / (2.0 * l1 * d)
     cos_beta = max(-1.0, min(1.0, cos_beta))
     q2 = alpha + np.arccos(cos_beta)
